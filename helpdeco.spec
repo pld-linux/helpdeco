@@ -3,8 +3,8 @@ Summary(de):	Utility-Programm zum Zerlegen von Windows Hilfedateien
 Summary(pl):	Narzêdzie do rozk³adania windowsowych plików pomocy
 Name:		helpdeco
 Version:	2.1
-Release:	1
-License:	freeware (non-commercial use and distribution only)
+Release:	2
+License:	Freeware (non-commercial use and distribution only)
 Group:		Applications/File
 Source0:	http://www.helpmaster.com/zip/helpdc21.zip
 Patch0:		%{name}-linux-port.patch
