@@ -1,0 +1,770 @@
+diff -Nur helpdeco-2.1.orig/Makefile helpdeco-2.1/Makefile
+--- helpdeco-2.1.orig/Makefile	Thu Jan  1 01:00:00 1970
++++ helpdeco-2.1/Makefile	Sun Jun  2 15:32:54 2002
+@@ -0,0 +1,17 @@
++# adapted from NetBSD port
++
++all: splitmrb zapres helpdeco
++
++CFLAGS = -O2
++LDFLAGS = -s
++
++splitmrb: splitmrb.c
++	$(CC) $(CFLAGS) $(LDFLAGS) -o splitmrb splitmrb.c
++zapres: zapres.c compat.o
++	$(CC) $(CFLAGS) $(LDFLAGS) -o zapres zapres.c compat.o
++helpdeco: helpdeco.c helpdec1.c compat.o
++	$(CC) $(CFLAGS) $(LDFLAGS) -o helpdeco helpdeco.c helpdec1.c compat.o
++compat.o: compat.c
++
++clean:
++	rm -f *.o helpdeco zapres splitmrb
+diff -Nur helpdeco-2.1.orig/compat.c helpdeco-2.1/compat.c
+--- helpdeco-2.1.orig/compat.c	Thu Jan  1 01:00:00 1970
++++ helpdeco-2.1/compat.c	Sun Jun  2 15:29:19 2002
+@@ -0,0 +1,123 @@
++/* taken from NetBSD port, fixed strupr() and strlwr() */
++
++#include <ctype.h>
++#include <libgen.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <termios.h>
++#include "compat.h"
++
++void _splitpath(
++	const char *path,
++	char *drive,
++	char *dir,
++	char *file,
++	char *ext)
++{
++	char *p;
++	char *t;
++
++	if (path == NULL)
++		return;
++
++	if (drive != NULL)
++		strcpy(drive, "");
++
++	if (dir != NULL) {
++		p = strdup(path);
++		strncpy(dir, strdup(dirname(p)), _MAX_DIR);
++		free(p);
++	}
++
++	if (ext != NULL) {
++		p = strdup(path);
++		t = strrchr(basename(p), '.');
++		if (t == NULL) {
++			strcpy(ext, "");
++		} else {
++			strncpy(ext, strdup(t), _MAX_EXT);
++		}
++		free(p);
++	}
++
++	if (file != NULL) {
++		p = strdup(path);
++		t = strrchr(p, '.');
++		if (t != NULL && strchr(t, '/') == NULL) {
++			*t = '\000';
++		}
++		strncpy(file, strdup(basename(p)), _MAX_FNAME);
++		free(p);
++	}
++
++	return;
++}
++
++void _makepath(
++	char *path,
++	const char *drive,
++	const char *dir,
++	const char *file,
++	const char *ext)
++{
++	snprintf(path, _MAX_PATH, "%s%s/%s%s",
++		drive,
++		dir,
++		file,
++		ext);
++	return;
++}
++
++int getch(void)
++{
++	int retval;
++	struct termios stored_settings;
++	struct termios new_settings;
++
++	tcgetattr(0, &stored_settings);
++	new_settings = stored_settings;
++	new_settings.c_lflag &= (~(ECHO|ICANON));
++	new_settings.c_cc[VTIME] = 0;
++	new_settings.c_cc[VMIN] = 1;
++	tcsetattr(0, TCSANOW, &new_settings);
++
++	retval = getchar();
++
++	tcsetattr(0, TCSANOW, &stored_settings);
++
++	return retval;
++}
++
++int memcmpi(
++	const void *s1,
++	const void *s2,
++	size_t len)
++{
++	char *p1 = strdup(s1);
++	char *p2 = strdup(s2);
++	int i;
++
++	for (i = 0; i < len; i++) {
++		if (p1[i] == '\000') p1[i] = ' ';
++		if (p2[i] == '\000') p2[i] = ' ';
++	}
++	i = strncasecmp(p1, p2, len);
++	free(p1);
++	free(p2);
++	return i;
++}
++
++char *strupr(char *s)
++{
++	char *p = s;
++	while (*p != '\000') { *p = toupper(*p); p++; }
++	return s;
++}
++
++char *strlwr(char *s)
++{
++	char *p = s;
++	while (*p != '\000') { *p = tolower(*p); p++; }
++	return s;
++}
+diff -Nur helpdeco-2.1.orig/compat.h helpdeco-2.1/compat.h
+--- helpdeco-2.1.orig/compat.h	Thu Jan  1 01:00:00 1970
++++ helpdeco-2.1/compat.h	Sun Jun  2 15:30:45 2002
+@@ -0,0 +1,37 @@
++/* taken from NetBSD port */
++
++#ifndef __compat_h__
++#define __compat_h__
++
++#include <strings.h>
++
++#define stricmp strcasecmp
++#define strcmpi strcasecmp
++#define memicmp memcmpi
++
++#ifndef _MAX_DIR
++#define _MAX_DIR 256
++#endif
++#ifndef _MAX_EXT
++#define _MAX_EXT 256
++#endif
++#ifndef _MAX_DRIVE
++#define _MAX_DRIVE 3
++#endif
++#ifndef _MAX_FNAME
++#define _MAX_FNAME 256
++#endif
++#ifndef _MAX_PATH
++#define _MAX_PATH 260
++#endif
++#ifndef MAX_PATH
++#define MAX_PATH _MAX_PATH
++#endif
++
++void _splitpath(const char *, char *, char *, char *, char *);
++void _makepath(char *, const char *, const char *, const char *, const char *);
++int getch(void);
++int memcmpi(const void *, const void *, size_t);
++char *strupr(char *);
++char *strlwr(char *);
++#endif
+diff -Nur helpdeco-2.1.orig/helpdec1.c helpdeco-2.1/helpdec1.c
+--- helpdeco-2.1.orig/helpdec1.c	Sat Dec  7 19:21:50 1996
++++ helpdeco-2.1/helpdec1.c	Sun Jun  2 15:44:41 2002
+@@ -1,15 +1,7 @@
+ /* HELPDEC1.C - HELPDECO supporting functions */
+ 
+-#include <stdlib.h>
+-#include <stdio.h>
+-#include <stdarg.h>
+-#include <string.h>
+-#include <conio.h>
+-#include <ctype.h>
+ #include "helpdeco.h"
+ 
+-extern BOOL overwrite; /* ugly: declared in HELPDECO.C */
+-
+ void error(char *format,...)
+ {
+     va_list arg;
+diff -Nur helpdeco-2.1.orig/helpdeco.c helpdeco-2.1/helpdeco.c
+--- helpdeco-2.1.orig/helpdeco.c	Tue Jan 28 00:57:48 1997
++++ helpdeco-2.1/helpdeco.c	Sun Jun  2 16:32:08 2002
+@@ -383,7 +383,7 @@
+ char *extension;
+ int extensions=0;
+ /* index into bmpext: bit 0=multiresolution bit 1=bitmap, bit 2=metafile, bit 3=hotspot data, bit 4=embedded, bit 5=transparent */
+-char *bmpext[]={"???","MRB","BMP","MRB","WMF","MRB","MRB","MRB","SHG","MRB","SHG","MRB","SHG","MRB","SHG","MRB"};
++char *bmpext[]={"???","mrb","bmp","mrb","wmf","mrb","mrb","mrb","shg","mrb","shg","mrb","shg","mrb","shg","mrb"};
+ char **stopwordfilename;
+ int stopwordfiles;
+ char **fontname;
+@@ -473,7 +473,7 @@
+ 	    result=0UL;
+ 	    for(mask=0x80000000UL;mask;mask>>=1)
+ 	    {
+-		if(hashhi>divhi||hashhi==divhi&&hashlo>=divlo)
++		if(hashhi>divhi||(hashhi==divhi&&hashlo>=divlo))
+ 		{
+ 		    result|=mask;
+ 		    hashhi-=divhi;
+@@ -908,8 +908,8 @@
+ 
+     _splitpath(a,NULL,NULL,aname,aext);
+     _splitpath(b,NULL,NULL,bname,bext);
+-    if(aext[0]=='\0') strcpy(aext,".HLP");
+-    if(bext[0]=='\0') strcpy(bext,".HLP");
++    if(aext[0]=='\0') strcpy(aext,".hlp");
++    if(bext[0]=='\0') strcpy(bext,".hlp");
+     i=strcmpi(aname,bname);
+     if(i) return i;
+     return strcmpi(aext,bext);
+@@ -1346,7 +1346,7 @@
+ 	f->seek(f,FileStart+dwOffsBitmap);
+ 	byType=f->get(f); /* type of picture: 5=DDB, 6=DIB, 8=METAFILE */
+ 	byPacked=f->get(f); /* packing method: 0=unpacked, 1=RunLen, 2=LZ77, 3=both */
+-	if(byType==6&&byPacked<4||byType==5&&byPacked<2)
++	if((byType==6&&byPacked<4)||(byType==5&&byPacked<2))
+ 	{
+ 	    type|=2; /* contains bitmap */
+ 	    memset(&bmfh,0,sizeof(bmfh));
+@@ -1370,10 +1370,10 @@
+ 	    dwHotspotSize=GetCDWord(f);
+ 	    dwPictureOffset=GetDWord(f);
+ 	    dwHotspotOffset=GetDWord(f);
+-	    if(exportplain||n==1&&(dwHotspotOffset==0L||dwHotspotSize==0L))
++	    if((exportplain||n==1)&&(dwHotspotOffset==0L||dwHotspotSize==0L))
+ 	    {
+ 		if(checkexternal) break;
+-		strcat(szFilename,".BMP");
++		strcat(szFilename,".bmp");
+ 		fTarget=my_fopen(szFilename,"wb");
+ 		if(fTarget)
+ 		{
+@@ -1450,14 +1450,14 @@
+ 	    dwHotspotSize=GetCDWord(f);
+ 	    dwPictureOffset=GetDWord(f);
+ 	    dwHotspotOffset=GetDWord(f);
+-	    if(exportplain||n==1&&(dwHotspotOffset==0L||dwHotspotSize==0L))
++	    if((exportplain||n==1)&&(dwHotspotOffset==0L||dwHotspotSize==0L))
+ 	    {
+ 		if(checkexternal) break;
+ 		afh.dwKey=0x9AC6CDD7L;
+ 		afh.wInch=2540;
+ 		wp=(unsigned short *)&afh;
+ 		for(i=0;i<10;i++) afh.wChecksum^=*wp++;
+-		strcat(szFilename,".WMF");
++		strcat(szFilename,".wmf");
+ 		fTarget=my_fopen(szFilename,"wb");
+ 		if(fTarget)
+ 		{
+@@ -1589,7 +1589,7 @@
+ 		    case 0xEB: /* topic jump into external file / secondary window */
+ 		    case 0xEE: /* popup jump into external file without font change */
+ 		    case 0xEF: /* topic jump into external file / secondary window without font change */
+-			if(hotspot[n].id1!=0&&hotspot[n].id1!=1&&hotspot[n].id1!=4&&hotspot[n].id1!=6||hotspot[n].id2!=0)
++			if((hotspot[n].id1!=0&&hotspot[n].id1!=1&&hotspot[n].id1!=4&&hotspot[n].id1!=6)||hotspot[n].id2!=0)
+ 			{
+ 			}
+ 			else
+@@ -1632,7 +1632,7 @@
+ }
+ /****************************************************************************
+ // END OF GRAPHICS STUFF
+-//**************************************************************************/
++****************************************************************************/
+ 
+ char *getbitmapname(unsigned int n) /* retrieve extension of exported bitmap n */
+ {
+@@ -2018,7 +2018,7 @@
+ 		}
+ 		putc('\n',hpj);
+ 	    }
+-	    if(groups||multi&&browsenums>1)
++	    if((groups||multi)&&browsenums>1)
+ 	    {
+ 		group=my_malloc(groups*sizeof(GROUP));
+ 		fputs("[GROUPS]\n",hpj);
+@@ -2320,6 +2320,7 @@
+ void FontLoad(FILE *HelpFile,FILE *rtf,FILE *hpj)
+ {
+     static char *BestFonts[]={"Arial","Times New Roman","MS Sans Serif","MS Serif","Helv","TmsRmn","MS Sans Serif","Helvetica","Times Roman","Times"};
++    int default_font = 0;
+     CHARMAPHEADER CharmapHeader;
+     FONTHEADER FontHdr;
+     FILE *f;
+@@ -2355,6 +2356,9 @@
+ 	    fseek(HelpFile,FontStart+FontHdr.FacenamesOffset+len*i,SEEK_SET);
+ 	    my_fread(FontName,len,HelpFile);
+ 	    FontName[len]='\0';
++	    if (FontName[0] == '\000') {
++		strcpy(FontName, BestFonts[default_font]);
++	    }
+ 	    ptr=strchr(FontName,',');
+ 	    if(ptr&&FontHdr.FacenamesOffset>=16)
+ 	    {
+@@ -2586,14 +2590,14 @@
+ 		    if(m->font.expndtw!=n->font.expndtw) fprintf(rtf,"\\expndtw%d",m->font.expndtw);
+ 		    if(m->font.FGRGB[0]!=n->font.FGRGB[0]) fprintf(rtf,"\\cf%d",m->font.FGRGB[0]);
+ 		    if(m->font.BGRGB[0]!=n->font.BGRGB[0]) fprintf(rtf,"\\cb%d",m->font.BGRGB[0]);
+-		    if(m->font.Height!=n->font.Height) fprintf(rtf,"\\fs%d",-2L*m->font.Height);
++		    if(m->font.Height!=n->font.Height) fprintf(rtf,"\\fs%ld",-2L*m->font.Height);
+ 		    if((m->font.Weight>500)!=(n->font.Weight>500)) fprintf(rtf,"\\b%d",m->font.Weight>500);
+ 		    if(m->font.Italic!=n->font.Italic) fprintf(rtf,"\\i%d",m->font.Italic);
+ 		    if(m->font.Underline!=n->font.Underline) fprintf(rtf,"\\ul%d",m->font.Underline);
+ 		    if(m->font.StrikeOut!=n->font.StrikeOut) fprintf(rtf,"\\strike%d",m->font.StrikeOut);
+ 		    if(m->font.DoubleUnderline!=n->font.DoubleUnderline) fprintf(rtf,"\\uldb%d",m->font.DoubleUnderline);
+ 		    if(m->font.SmallCaps!=n->font.SmallCaps) fprintf(rtf,"\\scaps%d",m->font.SmallCaps);
+-		    if(m->font.up!=n->font.up) if(m->font.up>0) fprintf(rtf,"\\up%d",m->font.up); else fprintf(rtf,"\\dn%d",-m->font.up);
++		    if(m->font.up!=n->font.up) { if(m->font.up>0) fprintf(rtf,"\\up%d",m->font.up); else fprintf(rtf,"\\dn%d",-m->font.up); }
+ 		    fprintf(rtf," \\sbasedon%u",m->BasedOn+9);
+ 		}
+ 		else
+@@ -2608,7 +2612,7 @@
+ 		    if(m->font.expndtw) fprintf(rtf,"\\expndtw%d",m->font.expndtw);
+ 		    if(m->font.up>0) fprintf(rtf,"\\up%d",m->font.up);
+ 		    else if(m->font.up<0) fprintf(rtf,"\\dn%d",-m->font.up);
+-		    fprintf(rtf,"\\fs%d",-2*m->font.Height);
++		    fprintf(rtf,"\\fs%ld",-2L*m->font.Height);
+ 		    if(m->font.FGRGB[0]) fprintf(rtf,"\\cf%d",m->font.FGRGB[0]);
+ 		    if(m->font.BGRGB[0]) fprintf(rtf,"\\cb%d",m->font.BGRGB[0]);
+ 		}
+@@ -2630,7 +2634,7 @@
+ 		    if(m->font.FontName!=n->font.FontName) fprintf(rtf,"\\f%d",m->font.FontName);
+ 		    if(m->font.FGRGB[0]!=n->font.FGRGB[0]) fprintf(rtf,"\\cf%d",m->font.FGRGB[0]);
+ 		    if(m->font.BGRGB[0]!=n->font.BGRGB[0]) fprintf(rtf,"\\cb%d",m->font.BGRGB[0]);
+-		    if(m->font.Height!=n->font.Height) fprintf(rtf,"\\fs%d",-2L*m->font.Height);
++		    if(m->font.Height!=n->font.Height) fprintf(rtf,"\\fs%ld",-2L*m->font.Height);
+ 		    if((m->font.Weight>500)!=(n->font.Weight>500)) fprintf(rtf,"\\b%d",m->font.Weight>500);
+ 		    if(m->font.Italic!=n->font.Italic) fprintf(rtf,"\\i%d",m->font.Italic);
+ 		    if(m->font.Underline!=n->font.Underline) fprintf(rtf,"\\ul%d",m->font.Underline);
+@@ -2648,7 +2652,7 @@
+ 		    if(m->font.StrikeOut) fputs("\\strike",rtf);
+ 		    if(m->font.DoubleUnderline) fputs("\\uldb",rtf);
+ 		    if(m->font.SmallCaps) fputs("\\scaps",rtf);
+-		    fprintf(rtf,"\\fs%d",-2*m->font.Height);
++		    fprintf(rtf,"\\fs%ld",-2L*m->font.Height);
+ 		    if(m->font.FGRGB[0]) fprintf(rtf,"\\cf%d",m->font.FGRGB[0]);
+ 		    if(m->font.BGRGB[0]) fprintf(rtf,"\\cb%d",m->font.BGRGB[0]);
+ 		}
+@@ -2800,10 +2804,12 @@
+ {
+     char *buffer;
+     long BytesRead;
++    long i;
+ 
+     if(Length<=NumBytes) /* no phrase compression in this case */
+     {
+ 	BytesRead=TopicRead(HelpFile,TopicPos,dest,Length);
++	for (i = BytesRead; i <= Length; i++) dest[i] = '\0';
+ 	if(BytesRead==Length&&Length<NumBytes) /* some trailing bytes are not used (bug in HCRTF ?) */
+ 	{
+ 	    buffer=my_malloc(NumBytes-Length);
+@@ -3325,14 +3331,14 @@
+     strcpy(buffer,name);
+     if(i)
+     {
+-	itoa(i,num,10);
++	snprintf(num, 7, "%d", i);
+ 	if(strlen(buffer)+strlen(num)>8)
+ 	{
+ 	    buffer[8-strlen(num)]='\0';
+ 	}
+ 	strcat(buffer,num);
+     }
+-    strcat(buffer,".RTF");
++    strcat(buffer,".rtf");
+ }
+ 
+ /* emit rtf commands to change to font i.
+@@ -3354,17 +3360,17 @@
+ 	else
+ 	{
+ 	    /* HC30 can't reset, so reset using \plain */
+-	    if(CurrentFont.Bold&&!f->Bold
+-	    || CurrentFont.Italic&&!f->Italic
+-	    || CurrentFont.Underline&&!(!uldb&&(ul||f->Underline))
+-	    || CurrentFont.StrikeOut&&!f->StrikeOut
+-	    || CurrentFont.DoubleUnderline&&!(uldb||f->DoubleUnderline)
+-	    || CurrentFont.SmallCaps&&!f->SmallCaps
+-	    || CurrentFont.FontName&&!f->FontName
+-	    || CurrentFont.textcolor&&!f->textcolor
+-	    || CurrentFont.backcolor&&!f->backcolor
+-	    || CurrentFont.up&&!f->up
+-	    || CurrentFont.style&&!f->style)
++	    if((CurrentFont.Bold&&!f->Bold)
++	    || (CurrentFont.Italic&&!f->Italic)
++	    || (CurrentFont.Underline&&!(!uldb&&(ul||f->Underline)))
++	    || (CurrentFont.StrikeOut&&!f->StrikeOut)
++	    || (CurrentFont.DoubleUnderline&&!(uldb||f->DoubleUnderline))
++	    || (CurrentFont.SmallCaps&&!f->SmallCaps)
++	    || (CurrentFont.FontName&&!f->FontName)
++	    || (CurrentFont.textcolor&&!f->textcolor)
++	    || (CurrentFont.backcolor&&!f->backcolor)
++	    || (CurrentFont.up&&!f->up)
++	    || (CurrentFont.style&&!f->style))
+ 	    {
+ 		fputs("\\plain",rtf);
+ 		memset(&CurrentFont,0,sizeof(CurrentFont));
+@@ -3408,7 +3414,7 @@
+     grouplisted=FALSE;
+     for(i=0;i<groups;i++) if(group[i].GroupHeader.GroupType==1||group[i].GroupHeader.GroupType==2)
+     {
+-	if(TopicNum>=group[i].GroupHeader.FirstTopic&&TopicNum<=group[i].GroupHeader.LastTopic&&(group[i].GroupHeader.GroupType==1||group[i].GroupHeader.GroupType==2&&(group[i].Bitmap[TopicNum>>3]&(1<<(TopicNum&7)))))
++	if(TopicNum>=group[i].GroupHeader.FirstTopic&&TopicNum<=group[i].GroupHeader.LastTopic&&((group[i].GroupHeader.GroupType==1||group[i].GroupHeader.GroupType==2)&&(group[i].Bitmap[TopicNum>>3]&(1<<(TopicNum&7)))))
+ 	{
+ 	    if(!grouplisted)
+ 	    {
+@@ -3544,9 +3550,9 @@
+ 			fprintf(rtf,"{\\up #}{\\footnote\\pard\\plain{\\up #} TOPIC%ld}\n",TopicNum);
+ 			if(resolvebrowse)
+ 			{
+-			    if(TopicHdr30->NextTopicNum>TopicNum&&TopicHdr30->PrevTopicNum>TopicNum
+-			    || TopicHdr30->NextTopicNum==-1&&TopicHdr30->PrevTopicNum>TopicNum
+-			    || TopicHdr30->NextTopicNum>TopicNum&&TopicHdr30->PrevTopicNum==-1)
++			    if((TopicHdr30->NextTopicNum>TopicNum&&TopicHdr30->PrevTopicNum>TopicNum)
++			    || (TopicHdr30->NextTopicNum==-1&&TopicHdr30->PrevTopicNum>TopicNum)
++			    || (TopicHdr30->NextTopicNum>TopicNum&&TopicHdr30->PrevTopicNum==-1))
+ 			    {
+ 				BrowseNum=AddLink(TopicNum,TopicHdr30->NextTopicNum,TopicHdr30->PrevTopicNum);
+ 			    }
+@@ -3579,9 +3585,9 @@
+ 			}
+ 			if(resolvebrowse)
+ 			{
+-			    if(TopicHdr->BrowseFor>TopicOffset&&TopicHdr->BrowseBck>TopicOffset
+-			    || TopicHdr->BrowseFor==-1L&&TopicHdr->BrowseBck>TopicOffset
+-			    || TopicHdr->BrowseFor>TopicOffset&&TopicHdr->BrowseBck==-1L)
++			    if((TopicHdr->BrowseFor>TopicOffset&&TopicHdr->BrowseBck>TopicOffset)
++			    || (TopicHdr->BrowseFor==-1L&&TopicHdr->BrowseBck>TopicOffset)
++			    || (TopicHdr->BrowseFor>TopicOffset&&TopicHdr->BrowseBck==-1L))
+ 			    {
+ 				BrowseNum=AddLink(TopicOffset,TopicHdr->BrowseFor,TopicHdr->BrowseBck);
+ 			    }
+@@ -3635,7 +3641,7 @@
+ 		}
+ 		TopicNum++;
+ 	    }
+-	    else if(LinkData1&&LinkData2&&TopicLink.RecordType==TL_DISPLAY30||TopicLink.RecordType==TL_DISPLAY||TopicLink.RecordType==TL_TABLE)
++	    else if(LinkData1&&LinkData2&&(TopicLink.RecordType==TL_DISPLAY30||TopicLink.RecordType==TL_DISPLAY||TopicLink.RecordType==TL_TABLE))
+ 	    {
+ 		if(AnnoFile) Annotate(TopicPos,rtf);
+ 		ptr=LinkData1;
+@@ -3738,7 +3744,7 @@
+ 				    break;
+ 				}
+ 			    }
+-			    fprintf(rtf,"\\tx%d",(x1&0x3FFF)*scaling-rounderr);
++			    fprintf(rtf,"\\tx%ld",(x1&0x3FFFL)*scaling-rounderr);
+ 			}
+ 		    }
+ 		    putc(' ',rtf);
+@@ -4100,7 +4106,7 @@
+     return rtf;
+ }
+ 
+-int _cdecl ContextRecCmp(const void *a,const void *b)
++int ContextRecCmp(const void *a,const void *b)
+ {
+     if(((const CONTEXTREC *)a)->TopicOffset<((const CONTEXTREC *)b)->TopicOffset) return -1;
+     if(((const CONTEXTREC *)a)->TopicOffset>((const CONTEXTREC *)b)->TopicOffset) return 1;
+@@ -5154,9 +5160,9 @@
+ 		TopicHdr30=(TOPICHEADER30 *)LinkData1;
+ 		if(resolvebrowse)
+ 		{
+-		    if(TopicHdr30->NextTopicNum>TopicNum&&TopicHdr30->PrevTopicNum>TopicNum
+-		    || TopicHdr30->NextTopicNum==-1&&TopicHdr30->PrevTopicNum>TopicNum
+-		    || TopicHdr30->NextTopicNum>TopicNum&&TopicHdr30->PrevTopicNum==-1)
++		    if((TopicHdr30->NextTopicNum>TopicNum&&TopicHdr30->PrevTopicNum>TopicNum)
++		    || (TopicHdr30->NextTopicNum==-1&&TopicHdr30->PrevTopicNum>TopicNum)
++		    || (TopicHdr30->NextTopicNum>TopicNum&&TopicHdr30->PrevTopicNum==-1))
+ 		    {
+ 			AddBrowse(TopicNum,TopicHdr30->NextTopicNum,TopicHdr30->PrevTopicNum);
+ 		    }
+@@ -5187,9 +5193,9 @@
+ 		TopicHdr=(TOPICHEADER *)LinkData1;
+ 		if(resolvebrowse)
+ 		{
+-		    if(TopicHdr->BrowseFor>TopicOffset&&TopicHdr->BrowseBck>TopicOffset
+-		    || TopicHdr->BrowseFor==-1L&&TopicHdr->BrowseBck>TopicOffset
+-		    || TopicHdr->BrowseFor>TopicOffset&&TopicHdr->BrowseBck==-1L)
++		    if((TopicHdr->BrowseFor>TopicOffset&&TopicHdr->BrowseBck>TopicOffset)
++		    || (TopicHdr->BrowseFor==-1L&&TopicHdr->BrowseBck>TopicOffset)
++		    || (TopicHdr->BrowseFor>TopicOffset&&TopicHdr->BrowseBck==-1L))
+ 		    {
+ 			AddBrowse(TopicOffset,TopicHdr->BrowseFor,TopicHdr->BrowseBck);
+ 		    }
+@@ -5394,7 +5400,7 @@
+     }
+ }
+ 
+-int _cdecl CTXOMAPRecCmp(const void *a,const void *b)
++int CTXOMAPRecCmp(const void *a,const void *b)
+ {
+     if(((CTXOMAPREC *)a)->TopicOffset<((CTXOMAPREC *)b)->TopicOffset) return -1;
+     if(((CTXOMAPREC *)a)->TopicOffset>((CTXOMAPREC *)b)->TopicOffset) return 1;
+@@ -5577,22 +5583,22 @@
+ 	    strcpy(hpjfilename,name);
+ 	    if(mvp)
+ 	    {
+-		strcat(hpjfilename,".MVP");
++		strcat(hpjfilename,".mvp");
+ 	    }
+ 	    else
+ 	    {
+-		strcat(hpjfilename,".HPJ");
++		strcat(hpjfilename,".hpj");
+ 	    }
+ 	    hpj=my_fopen(hpjfilename,"wt");
+ 	    if(hpj)
+ 	    {
+ 		strcpy(filename,name);
+-		strcat(filename,".ICO");
++		strcat(filename,".ico");
+ 		SysList(HelpFile,hpj,filename); /* after ContextLoad */
+ 		ListBaggage(HelpFile,hpj,before31);
+ 		if(!mvp) AliasList(hpj); /* after ContextLoad, before TopicDump */
+ 		strcpy(filename,name);
+-		strcat(filename,".PH");
++		strcat(filename,".ph");
+ 		PhraseList(filename); /* after PhraseLoad */
+ 		BuildName(filename,TopicsPerRTF>0);
+ 		rtf=my_fopen(filename,"wt");
+@@ -5672,7 +5678,7 @@
+ 	    putc('\n',stderr);
+ 	    if(!before31&&guessing) GuessFromKeywords(HelpFile); /* after FirstPass, before SysList */
+ 	    strcpy(filename,name);
+-	    strcat(filename,".CNT");
++	    strcat(filename,".cnt");
+ 	    rtf=my_fopen(filename,"wt");
+ 	    if(rtf)
+ 	    {
+@@ -5752,7 +5758,7 @@
+ 	    PhraseLoad(HelpFile);
+ 	    DumpTopic(HelpFile,offset);
+ 	}
+-	else if(strcmp(dumpfile+strlen(dumpfile)-4,".GRP")==0)
++	else if(strcmp(dumpfile+strlen(dumpfile)-4,".grp")==0)
+ 	{
+ 	    GroupDump(HelpFile);
+ 	}
+@@ -5882,7 +5888,7 @@
+     return TRUE;
+ }
+ 
+-int _cdecl main(int argc,char *argv[])
++int main(int argc,char *argv[])
+ {
+     char AnnoFileName[81];
+     char drive[_MAX_DRIVE];
+@@ -6036,9 +6042,8 @@
+     }
+     if(filename)
+     {
+-	strupr(filename);
+ 	_splitpath(filename,drive,dir,name,ext);
+-	if(ext[0]=='\0') strcpy(ext,".HLP");
++	if(ext[0]=='\0') strcpy(ext,".hlp");
+ 	mvp=ext[1]=='M';
+ 	_makepath(HelpFileName,drive,dir,name,ext);
+ 	f=fopen(HelpFileName,"rb");
+@@ -6046,7 +6051,7 @@
+ 	{
+ 	    if(annotate)
+ 	    {
+-		if(AnnoFileName[0]=='\0') _makepath(AnnoFileName,drive,dir,name,".ANN");
++		if(AnnoFileName[0]=='\0') _makepath(AnnoFileName,drive,dir,name,".ann");
+ 		AnnoFile=fopen(AnnoFileName,"rb");
+ 		if(!AnnoFile)
+ 		{
+@@ -6095,9 +6100,6 @@
+ 		       "HCRTF, MVC, WMVC or MVCC. The file will not be identical, but should look and\n"
+ 		       "work like the original. This program is Freeware. Use at your own risk. No\n"
+ 		       "part of it may be used commercially. No fees may be charged on distributing.\n"
+-#ifndef _WIN32
+-		       "Launch from Windows 95/Windows NT command line to handle larger helpfiles."
+-#endif
+ 		       ,sizeof(int)*8);
+     }
+     return 0;
+diff -Nur helpdeco-2.1.orig/helpdeco.h helpdeco-2.1/helpdeco.h
+--- helpdeco-2.1.orig/helpdeco.h	Sat Dec  7 19:21:28 1996
++++ helpdeco-2.1/helpdeco.h	Sun Jun  2 15:46:42 2002
+@@ -7,8 +7,8 @@
+ #include <stdarg.h>
+ #include <stdlib.h>
+ #include <string.h>
+-#include <conio.h>
+ #include <ctype.h>
++#include "compat.h"
+ 
+ #ifdef __TURBOC__
+ typedef struct { char a,b,c; } align;
+@@ -651,4 +651,5 @@
+ extern void LinkDump(FILE *HelpFile);
+ extern void AnnotationDump(FILE *HelpFile,long FileLength,char *name);
+ 
++extern BOOL overwrite;
+ #endif
+diff -Nur helpdeco-2.1.orig/splitmrb.c helpdeco-2.1/splitmrb.c
+--- helpdeco-2.1.orig/splitmrb.c	Fri Sep 13 00:11:54 1996
++++ helpdeco-2.1/splitmrb.c	Sun Jun  2 15:39:18 2002
+@@ -14,6 +14,7 @@
+ */
+ #include <stdio.h>
+ #include <string.h>
++#include <stdint.h>
+ #include <stdlib.h>
+ 
+ typedef enum {FALSE,TRUE} BOOL;
+@@ -216,14 +217,11 @@
+     int i,l,n;
+     typedef struct
+     {
+-	unsigned char c1,c2,c3;
+-	unsigned int x,y,w,h;
+-	unsigned long hash;
+-    }
+-    HOTSPOT;
+-#if sizeof(HOTSPOT)!=15
+-#error Compile byte aligned !
+-#endif
++	uint8_t c1,c2,c3;
++	uint16_t x,y,w,h;
++	uint32_t hash;
++    }
++    HOTSPOT __attribute((packed));
+     HOTSPOT *hotspot;
+     char name[80];
+     char buffer[128];
+@@ -308,7 +306,7 @@
+ 	while(l>0&&filename[l-1]!='\\'&&filename[l-1]!='/'&&filename[l-1]!=':') l--;
+ 	m=l;
+ 	while(filename[l]!='\0'&&filename[l]!='.') l++;
+-	if(filename[l]=='\0') strcpy(filename+l,".MRB");
++	if(filename[l]=='\0') strcpy(filename+l,".mrb");
+ 	f=fopen(filename,"rb");
+ 	if(!f)
+ 	{
+@@ -331,7 +329,7 @@
+ 		    fseek(f,offset,SEEK_SET);
+ 		    byType=getc(f); // type of picture: 5=DDB, 6=DIB, 8=METAFILE
+ 		    byPacked=getc(f); // packing method: 0=unpacked, 1=RunLen, 2=LZ77
+-		    if(byType==6||byType==5&&byPacked<2)
++		    if(byType==6||(byType==5&&byPacked<2))
+ 		    {
+ 			memset(&bmfh,0,sizeof(bmfh));
+ 			memset(&bmih,0,sizeof(bmih));
+@@ -378,17 +376,17 @@
+ 			    sprintf(filename+l,".%03d",j);
+ 			    if(w==96&&h==48&&!res[0])
+ 			    {
+-				strcpy(filename+l,".CGA");
++				strcpy(filename+l,".cga");
+ 				res[0]=TRUE;
+ 			    }
+ 			    else if(w==96&&h==72&&!res[1])
+ 			    {
+-				strcpy(filename+l,".EGA");
++				strcpy(filename+l,".ega");
+ 				res[1]=TRUE;
+ 			    }
+ 			    else if(w==96&&h==96&&!res[2])
+ 			    {
+-				strcpy(filename+l,".VGA");
++				strcpy(filename+l,".vga");
+ 				res[2]=TRUE;
+ 			    }
+ 			    else if(w==120&&h==120&&!res[3])
+@@ -398,12 +396,12 @@
+ 			    }
+ 			    else if(w==72&&h==72&&!res[4])
+ 			    {
+-				strcpy(filename+l,".MAC");
++				strcpy(filename+l,".mac");
+ 				res[4]=TRUE;
+ 			    }
+ 			    else if(!res[6])
+ 			    {
+-				strcpy(filename+l,".BMP");
++				strcpy(filename+l,".bmp");
+ 				res[6]=TRUE;
+ 			    }
+ 			    fTarget=fopen(filename+m,"wb");
+@@ -472,7 +470,6 @@
+ 		    }
+ 		    else if(byType==8) // Windows MetaFile
+ 		    {
+-			APMFILEHEADER afh;
+ 			unsigned short *wp;
+ 
+ 			memset(&afh,0,sizeof(afh));
+@@ -512,7 +509,7 @@
+ 			    for(k=0;k<10;k++) afh.wChecksum^=*wp++;
+ 			    if(!res[5])
+ 			    {
+-				strcpy(filename+l,".WMF");
++				strcpy(filename+l,".wmf");
+ 				res[5]=TRUE;
+ 			    }
+ 			    else
+diff -Nur helpdeco-2.1.orig/zapres.c helpdeco-2.1/zapres.c
+--- helpdeco-2.1.orig/zapres.c	Fri Sep 13 20:52:50 1996
++++ helpdeco-2.1/zapres.c	Sun Jun  2 15:41:14 2002
+@@ -17,8 +17,9 @@
+ 
+ #include <stdio.h>
+ #include <stdlib.h>
+-#include <dir.h>
++#include <sys/dir.h>
+ #include <string.h>
++#include "compat.h"
+ 
+ int backup(FILE *f,char *oldname)
+ {
+@@ -31,7 +32,7 @@
+     int result=0;
+ 
+     _splitpath(oldname,drive,dir,fname,ext);
+-    _makepath(path,drive,dir,fname,".BAK");
++    _makepath(path,drive,dir,fname,".bak");
+     bak=fopen(path,"wb");
+     if(bak)
+     {
+@@ -87,7 +88,7 @@
+ 	printf("ZAPRES - removes resolution information from Windows bitmap files - Version 1.1\n"
+ 	       "M.Winterhoff, Geschw.-Scholl-Ring 17, 38444 Wolfsburg, Germany, CIS 100326,2776\n"
+ 	       "\n"
+-	       "usage:	ZAPRES filename1[.BMP] filename2[.BMP] ...\n"
++	       "usage:	ZAPRES filename1[.bmp] filename2[.bmp] ...\n"
+ 	       "\n"
+ 	       "option: Normally ZAPRES will create a .BAK file before it attempts to modify\n"
+ 	       "	the input file. Specify option /b if you don't want to backup files.\n"
+@@ -102,7 +103,7 @@
+     else for(i=1;i<b;i++)
+     {
+ 	_splitpath(argv[i],drive,dir,fname,ext);
+-	if(!ext[0]) strcpy(ext,".BMP");
++	if(!ext[0]) strcpy(ext,".bmp");
+ 	_makepath(path,drive,dir,fname,ext);
+ 	f=fopen(path,"r+b");
+ 	if(f)
