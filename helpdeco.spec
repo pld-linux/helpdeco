@@ -10,6 +10,7 @@ Source0:	http://www.helpmaster.com/zip/helpdc21.zip
 # Source0-md5:	a5f9ceca5bb348aebb6a422f4941dad8
 Patch0:		%{name}-linux-port.patch
 URL:		http://www.helpmaster.com/hlp-developmentaids-helpdeco.htm
+BuildRequires:	unzip
 # no x86 asm, but requires 16-bit short, 32-bit long and little-endian CPU
 ExclusiveArch:	%{ix86}
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
