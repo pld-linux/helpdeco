@@ -1,6 +1,6 @@
 Summary:	Utility program to dissect Windows help files
-Summary(de):	Utility-Programm zum Zerlegen von Windows Hilfedateien
-Summary(pl):	Narzêdzie do rozk³adania windowsowych plików pomocy
+Summary(de.UTF-8):   Utility-Programm zum Zerlegen von Windows Hilfedateien
+Summary(pl.UTF-8):   NarzÄ™dzie do rozkÅ‚adania windowsowych plikÃ³w pomocy
 Name:		helpdeco
 Version:	2.1
 Release:	2
@@ -23,16 +23,16 @@ many MVB multi media viewer titles into all files required for a
 rebuild using the appropriate help compiler HC30, HC31, HCP, HCW,
 HCRTF, WMVC, MMVC or MVC.
 
-%description -l de
+%description -l de.UTF-8
 HELPDECO zerlegt HLP-Hilfedateien von Windows 3.0, 3.1, 3.11 und 95
-und viele MVB-Dateien des Multimedia-Viewers in alle für den
+und viele MVB-Dateien des Multimedia-Viewers in alle fÃ¼r den
 jeweiligen Hilfecompiler HC30, HC31, HCP, HCW, HCRTF, WMVC, MMVC oder
 MVC zum erneuten Zusammenbau erforderlichen Dateien.
 
-%description -l pl
-HELPDECO rozk³ada pliki HLP z Windows 3.0, 3.1, 3.11 i 95 oraz wiele
-rodzajów plików MVB na wszystkie pliki potrzebne do przebudowania przy
-u¿yciu odpowiedniego kompilatora (HC30, HC31, HCP, HCW, HCRTF, WMVC,
+%description -l pl.UTF-8
+HELPDECO rozkÅ‚ada pliki HLP z Windows 3.0, 3.1, 3.11 i 95 oraz wiele
+rodzajÃ³w plikÃ³w MVB na wszystkie pliki potrzebne do przebudowania przy
+uÅ¼yciu odpowiedniego kompilatora (HC30, HC31, HCP, HCW, HCRTF, WMVC,
 MMVC lub MVC).
 
 %prep
