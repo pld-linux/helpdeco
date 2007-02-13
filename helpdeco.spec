@@ -1,6 +1,6 @@
 Summary:	Utility program to dissect Windows help files
-Summary(de.UTF-8):   Utility-Programm zum Zerlegen von Windows Hilfedateien
-Summary(pl.UTF-8):   Narzędzie do rozkładania windowsowych plików pomocy
+Summary(de.UTF-8):	Utility-Programm zum Zerlegen von Windows Hilfedateien
+Summary(pl.UTF-8):	Narzędzie do rozkładania windowsowych plików pomocy
 Name:		helpdeco
 Version:	2.1
 Release:	2
